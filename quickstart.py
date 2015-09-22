@@ -52,6 +52,7 @@ def get_credentials():
     return credentials
 
 def parseInput(filePath):
+    """ Unused function """
     with open (filePath, "r") as contents:
         lines = contents.readlines()
             
@@ -79,13 +80,16 @@ def parseInput(filePath):
         return events
 
 def getEvents():
-
+    """ Gets events from BruWin API
+    Return JSON string"""
     h = httplib2.Http(".cache")
     (resp_headers, content) = h.request("https://api.superfanu.com/3.1.0/gen/get_events.php?nid=45&headers=year", "GET")
     return json.loads(content)
-    #print(resp_headers)
+
     
 def addEvent(service, calendar, summary, location, description, start):
+    """Adds event to specified calendar if not already in there
+    Returns true if event added, false otherwise"""
     # Refer to the Python quickstart on how to setup the environment:
     # https://developers.google.com/google-apps/calendar/quickstart/python
     # Change the scope to 'https://www.googleapis.com/auth/calendar' and delete any
@@ -96,10 +100,10 @@ def addEvent(service, calendar, summary, location, description, start):
         'location': location,
         'description': description,
         'start': {
-            'dateTime': str(start).replace(" ", "T"),
+            'dateTime': start.isoformat(),
         },
         'end': {
-            'dateTime': str(start + datetime.timedelta(minutes=30)).replace(" ", "T"),
+            'dateTime': (start + datetime.timedelta(minutes=30)).isoformat(),
         },
         'reminders': {
             'useDefault': False,
@@ -109,28 +113,32 @@ def addEvent(service, calendar, summary, location, description, start):
         },
     }
     
+    eventsResult = service.events().list(
+        calendarId=calendar, timeMin=start.isoformat(), maxResults=10, singleEvents=True,
+        orderBy='startTime').execute()
+    dupEvents = eventsResult.get('items', [])
+
+    #many events can start at the same time
+    #assumes no more than 10 start at the same time
+    for dupEvent in dupEvents:
+        if dupEvent["summary"] == summary and dupEvent["location"] == location and dupEvent["description"] == description:
+            print ('%s %s already created' % (summary,start))
+            return False
     event = service.events().insert(calendarId=calendar, body=event).execute()
-    print ('Event created: %s' % (event.get('htmlLink')))
+    print ('Event created: %s %s' % (summary, start))
+    return True
 
 def main():
-    """Shows basic usage of the Google Calendar API.
-
-    Creates a Google Calendar API service object and outputs a list of the next
-    10 events on the user's calendar.
-    """
     credentials = get_credentials()
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('calendar', 'v3', http=http)
 
     events = getEvents()
-    event = events[0]
-    for event in events:
 
-        print(event)
+    for event in events:
         timeString = event["date"] + " " + event["starttime"] + " -07:00"
-        print(parse(timeString))
         addEvent(service, "4hpackocjiu24bl06roa4ess6k@group.calendar.google.com", event["name"], event["description"], event["location"], parse(timeString)) 
-        #print(parseInput("/home/mark/Downloads/Bruwin_Oct-31.txt"))
+
 
 if __name__ == '__main__':
     main()
