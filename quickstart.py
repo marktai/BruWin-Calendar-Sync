@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from __future__ import print_function
 import httplib2
 import os
@@ -87,13 +89,16 @@ def getEvents():
     return json.loads(content)
 
     
-def addEvent(service, calendar, summary, location, description, start):
+def addEvent(service, calendar, summary, location, description, start, dayLightSaving):
     """Adds event to specified calendar if not already in there
     Returns true if event added, false otherwise"""
     # Refer to the Python quickstart on how to setup the environment:
     # https://developers.google.com/google-apps/calendar/quickstart/python
     # Change the scope to 'https://www.googleapis.com/auth/calendar' and delete any
     # stored credentials.
+
+    if dayLightSaving:
+	start = start + datetime.timedelta(minutes=60)
 
     event = {
         'summary': summary,
@@ -114,18 +119,23 @@ def addEvent(service, calendar, summary, location, description, start):
     }
     
     eventsResult = service.events().list(
-        calendarId=calendar, timeMin=start.isoformat(), maxResults=10, singleEvents=True,
+        calendarId=calendar, timeMin=(start + datetime.timedelta(minutes=-61)).isoformat(), maxResults=20, singleEvents=True,
         orderBy='startTime').execute()
     dupEvents = eventsResult.get('items', [])
 
     #many events can start at the same time
-    #assumes no more than 10 start at the same time
+    #assumes no more than 20 start at the same time
+
+    deleted = False
     for dupEvent in dupEvents:
         if dupEvent["summary"] == summary and dupEvent["location"] == location and dupEvent["description"] == description:
-            print ('%s %s already created' % (summary,start))
-            return False
+            deleted = True
+	    service.events().delete(calendarId=calendar, eventId=dupEvent['id']).execute()
     event = service.events().insert(calendarId=calendar, body=event).execute()
-    print ('Event created: %s %s' % (summary, start))
+    if not deleted:
+        print ('Event created: %s %s' % (summary, start))
+    else:
+	print ('Event modified: %s %s' % (summary, start))
     return True
 
 def main():
@@ -134,10 +144,12 @@ def main():
     service = discovery.build('calendar', 'v3', http=http)
 
     events = getEvents()
+	
+    dayLightSaving = True;
 
     for event in events:
         timeString = event["date"] + " " + event["starttime"] + " -07:00"
-        addEvent(service, "4hpackocjiu24bl06roa4ess6k@group.calendar.google.com", event["name"], event["description"], event["location"], parse(timeString)) 
+        addEvent(service, "4hpackocjiu24bl06roa4ess6k@group.calendar.google.com", event["name"], event["description"], event["location"], parse(timeString), dayLightSaving) 
 
 
 if __name__ == '__main__':
